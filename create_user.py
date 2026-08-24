@@ -59,11 +59,13 @@ def parse_switches(filepath: str) -> List[SwitchInfo]:
 
 
 def get_user_input(cli_role: Optional[str] = None) -> tuple[str, str, str]:
-    """Prompt for username and password (with confirmation). Optionally accept role from CLI."""
+    """Prompt for username, then role, then password (with confirmation). Optionally accept role from CLI."""
     username = input("Enter username to create: ").strip()
     if not username:
         print("Username cannot be empty.")
         sys.exit(1)
+
+    role = cli_role if cli_role else prompt_role()
 
     max_retries = 3
     for attempt in range(1, max_retries + 1):
@@ -85,7 +87,6 @@ def get_user_input(cli_role: Optional[str] = None) -> tuple[str, str, str]:
     else:
         sys.exit(1)
 
-    role = cli_role if cli_role else prompt_role()
     return username, password1, role
 
 
