@@ -1,0 +1,7 @@
+switch.txt
+failed_switches.txt
+logs/
+__pycache__/
+*.pyc
+.env
+docs/
