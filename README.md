@@ -4,7 +4,12 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Aruba%20%7C%20HPE%20ProCurve-orange.svg)]()
 
-Production-ready network automation tool to bulk-create operator user accounts across Aruba and HPE ProCurve enterprise switches via SSH.
+Production-ready network automation tool to bulk-create user accounts across Aruba and HPE ProCurve enterprise switches via SSH.
+
+Supports two operating modes:
+
+- **RBAC Mode (Default, Safe, Multi-User):** Adds a new user account without overwriting existing switch accounts. Roles: `Level-15`, `Level-9`, `Level-1`, `Level-0`.
+- **Classic Mode:** Replaces/overwrites the existing single-slot manager or operator account. Roles: `manager`, `operator`.
 
 ---
 
@@ -119,21 +124,35 @@ Connects to switches one-by-one:
 python create_user.py
 ```
 
-### 4. Role Selection (`--role`)
-Choose the user role to provision. Operator creates a read-only/monitoring account; manager creates a full-control account. If omitted, the script prompts interactively (default: `operator`).
+### 4. Role Selection (`--role`) & Operation Mode (`--mode`)
+
+Choose the operation mode and user role. Two modes are supported:
+
+- **RBAC mode** (default, safe, multi-user): Adds a new user without overwriting existing accounts.
+  Roles: `Level-15`, `Level-9`, `Level-1`, `Level-0`.
+- **Classic mode**: Replaces/overwrites the existing single-slot manager or operator account.
+  Roles: `manager`, `operator`.
+
+If `--mode`/`--role` are omitted, the script prompts interactively. If `--role` is given without `--mode`, the mode is inferred from the role (Level-* roles → RBAC, manager/operator → Classic). Invalid combinations (e.g. `--mode rbac --role manager`) cause an error and exit.
 
 ```bash
-# Interactive role prompt (defaults to operator)
+# Interactive prompts for username, mode, role, and password
 python create_user.py
 
-# Explicit operator role
-python create_user.py --role operator --workers 5
+# Explicit RBAC mode with Level-9 role
+python create_user.py --mode rbac --role Level-9 --workers 5
 
-# Explicit manager role
+# Explicit Classic mode replacing the manager slot
+python create_user.py --mode classic --role manager --workers 5
+
+# Role-only inference: Level-15 implies RBAC mode
+python create_user.py --role Level-15 --workers 5
+
+# Role-only inference: manager implies Classic mode
 python create_user.py --role manager --workers 5
 ```
 
-The chosen role is recorded in the audit log (`logs/log_create_user_*.txt`) under `Target role`.
+The chosen mode and role are recorded in the audit log (`logs/log_create_user_*.txt`).
 
 ### 5. Custom Inventory File / Re-running Failures
 Run against an alternative file, such as the auto-generated failure list:
