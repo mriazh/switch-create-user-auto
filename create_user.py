@@ -90,13 +90,17 @@ def prompt_role(mode: str) -> str:
         for _ in range(3):
             print("Select RBAC role:")
             print(
-                "  [1] Level-15 : Administrator (Full Access + Can view 'show running-config') [DEFAULT]"
+                "  [1] Level-15 : Super Administrator (Full access + can view 'show running-config') [DEFAULT]"
             )
             print(
-                "  [2] Level-9  : Designated Admin (Can configure ports/VLANs, CANNOT modify user passwords)"
+                "  [2] Level-9  : Designated Admin    (Full config + can view 'show running-config', cannot alter user passwords)"
             )
-            print("  [3] Level-1  : Operator (Read-only / Telemetry & monitoring)")
-            print("  [4] Level-0  : Network Diagnostic (Ping & Traceroute only)")
+            print(
+                "  [3] Level-1  : Network Operator   (Read-only telemetry & status, cannot view running-config)"
+            )
+            print(
+                "  [4] Level-0  : Network Diagnostic (Diagnostics only: ping, traceroute)"
+            )
             choice = input("Enter choice [1-4] (default: 1): ").strip()
             if choice in ("1", ""):
                 return "Level-15"
@@ -204,33 +208,53 @@ def get_user_input(
     return username, password1, mode, role
 
 
+def get_role_description(mode: str, role: str) -> str:
+    """Return a concise description of permissions for the confirmation screen."""
+    if mode == "rbac":
+        descs = {
+            "Level-15": "Full Access + Show Running-Config (Unrestricted)",
+            "Level-9": "Full Config + Show Running-Config (Protected from modifying users)",
+            "Level-1": "Read-Only Telemetry (Operational status only, no running-config)",
+            "Level-0": "Diagnostics Only (Ping, Traceroute)",
+        }
+        return descs.get(role, role)
+    descs = {
+        "manager": "Full Administrator (Primary Superadmin Slot)",
+        "operator": "Read-Only Monitoring (Primary Operator Slot)",
+    }
+    return descs.get(role, role)
+
+
 def confirm_execution(username: str, count: int, mode: str, role: str) -> bool:
     """Ask for confirmation before proceeding. Classic mode requires typing OVERWRITE."""
+    privileges = get_role_description(mode, role)
     if mode == "rbac":
-        print("=" * 56)
+        print("=" * 60)
         print("EXECUTION CONFIRMATION")
-        print("=" * 56)
+        print("=" * 60)
         print("Mode        : ADD NEW USER (RBAC Multi-User)")
         print(f"Target User : {username}")
         print(f"Role        : {role}")
+        print(f"Privileges  : {privileges}")
         print("Impact      : SAFE - Existing switch accounts will NOT be overwritten")
         print(f"Switch Count: {count}")
-        print("=" * 56)
+        print("=" * 60)
         response = input("Continue with execution? (y/n): ").strip().lower()
         return response in ("y", "yes")
 
     # classic mode — critical safety type
-    print("=" * 56)
+    print("=" * 60)
     print("⚠️  WARNING: CLASSIC OVERWRITE MODE SELECTED")
-    print("=" * 56)
+    print("=" * 60)
     print("Mode        : REPLACE EXISTING ACCOUNT (Classic)")
     print(f"Target User : {username}")
     print(f"Target Slot : {role.upper()}")
+    print(f"Privileges  : {privileges}")
     print(
         f"Impact      : ⚠️  THE EXISTING {role.upper()} USER ON EACH SWITCH WILL BE PERMANENTLY REPLACED!"
     )
     print(f"Switch Count: {count}")
-    print("=" * 56)
+    print("=" * 60)
     response = input("Type 'OVERWRITE' to confirm and proceed: ").strip()
     return response.upper() == "OVERWRITE"
 

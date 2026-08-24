@@ -8,7 +8,7 @@ Production-ready network automation tool to bulk-create user accounts across Aru
 
 Supports two operating modes:
 
-- **RBAC Mode (Default, Safe, Multi-User):** Adds a new user account without overwriting existing switch accounts. Roles: `Level-15`, `Level-9`, `Level-1`, `Level-0`.
+- **RBAC Mode (Default, Safe, Multi-User):** Adds a new user account without overwriting existing switch accounts. Roles: `Level-15` (Full access + show running-config), `Level-9` (Full config + show running-config, protected from user/password changes), `Level-1` (Operator view-only), `Level-0` (Diagnostics).
 - **Classic Mode:** Replaces/overwrites the existing single-slot manager or operator account. Roles: `manager`, `operator`.
 
 ---
