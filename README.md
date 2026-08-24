@@ -19,6 +19,7 @@ This automation tool reads a central switch inventory (`switch.txt`), prompts fo
 ## ✨ Key Features
 
 - **Interactive Secure Credentials:** New username and password are requested at runtime. Passwords use masked input (`getpass`) and require double confirmation before proceeding.
+- **Role Selection:** Choose `operator` (read-only) or `manager` (full control) via `--role` CLI flag or interactive prompt. Defaults to `operator`. The role is written into the audit log and used in the switch command sequence (`password <role> user-name <user>`).
 - **Interactive CLI Dialogue Handling:** Employs Netmiko's `send_command_timing` with calibrated delays to handle multi-step interactive prompts (`New password for operator:` and `Re-enter:`).
 - **Multithreaded Concurrent Execution:** Supports configurable thread workers (`--workers N`) via Python's `concurrent.futures.ThreadPoolExecutor`. 100+ switches can be provisioned in 2–3 minutes.
 - **Fail-Safe & Fault Tolerant:** Continues through connection failures, timeouts, and auth errors without terminating the batch run.
@@ -118,7 +119,23 @@ Connects to switches one-by-one:
 python create_user.py
 ```
 
-### 4. Custom Inventory File / Re-running Failures
+### 4. Role Selection (`--role`)
+Choose the user role to provision. Operator creates a read-only/monitoring account; manager creates a full-control account. If omitted, the script prompts interactively (default: `operator`).
+
+```bash
+# Interactive role prompt (defaults to operator)
+python create_user.py
+
+# Explicit operator role
+python create_user.py --role operator --workers 5
+
+# Explicit manager role
+python create_user.py --role manager --workers 5
+```
+
+The chosen role is recorded in the audit log (`logs/log_create_user_*.txt`) under `Target role`.
+
+### 5. Custom Inventory File / Re-running Failures
 Run against an alternative file, such as the auto-generated failure list:
 ```bash
 python create_user.py --file failed_switches.txt --workers 5

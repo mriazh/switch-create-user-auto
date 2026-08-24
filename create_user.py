@@ -43,21 +43,23 @@ def parse_switches(filepath: str) -> List[SwitchInfo]:
         print(f"Error: File '{filepath}' not found.")
         sys.exit(1)
 
-    with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
         for line_num, line in enumerate(f, 1):
-            line = line.replace('\xa0', ' ').strip()
+            line = line.replace("\xa0", " ").strip()
             if not line:
                 continue
-            parts = [part.replace('\xa0', ' ').strip() for part in line.split('|')]
+            parts = [part.replace("\xa0", " ").strip() for part in line.split("|")]
             if len(parts) != 4:
                 continue
             name, ip, username, password = parts
-            switches.append(SwitchInfo(name=name, ip=ip, username=username, password=password))
+            switches.append(
+                SwitchInfo(name=name, ip=ip, username=username, password=password)
+            )
     return switches
 
 
-def get_user_input() -> tuple[str, str]:
-    """Prompt for username and password (with confirmation)."""
+def get_user_input(cli_role: Optional[str] = None) -> tuple[str, str, str]:
+    """Prompt for username and password (with confirmation). Optionally accept role from CLI."""
     username = input("Enter username to create: ").strip()
     if not username:
         print("Username cannot be empty.")
@@ -70,7 +72,7 @@ def get_user_input() -> tuple[str, str]:
 
         if password1 == password2:
             if password1:
-                return username, password1
+                break
             else:
                 print("Password cannot be empty.")
         else:
@@ -80,26 +82,53 @@ def get_user_input() -> tuple[str, str]:
             else:
                 print("Maximum retries exceeded. Exiting.")
                 sys.exit(1)
+    else:
+        sys.exit(1)
 
-    sys.exit(1)
+    role = cli_role if cli_role else prompt_role()
+    return username, password1, role
 
 
-def confirm_execution(username: str, count: int) -> bool:
+def prompt_role() -> str:
+    """Interactively prompt for user role. Defaults to operator."""
+    for _ in range(3):
+        print("Select user role:")
+        print("  [1] operator (Read-only / View monitoring)")
+        print("  [2] manager  (Full control / Read-Write / Config & Backup)")
+        choice = input("Enter choice [1/2] (default: 1): ").strip().lower()
+        if choice in ("1", "operator", ""):
+            return "operator"
+        if choice in ("2", "manager"):
+            return "manager"
+        print("Invalid choice. Please try again.")
+    print("Invalid choice. Defaulting to operator.")
+    return "operator"
+
+
+def confirm_execution(username: str, count: int, role: str) -> bool:
     """Ask for confirmation before proceeding."""
-    response = input(f"You are about to create user '{username}' on {count} switches. Continue? (y/n): ").strip().lower()
-    return response in ('y', 'yes')
+    response = (
+        input(
+            f"You are about to create a {role} user '{username}' on {count} switches. Continue? (y/n): "
+        )
+        .strip()
+        .lower()
+    )
+    return response in ("y", "yes")
 
 
-def create_user_on_switch(switch: SwitchInfo, new_username: str, new_password: str) -> SwitchResult:
-    """Create operator user on a single switch via SSH."""
+def create_user_on_switch(
+    switch: SwitchInfo, new_username: str, new_password: str, role: str = "operator"
+) -> SwitchResult:
+    """Create a user on a single switch via SSH."""
     device = {
-        'device_type': 'hp_procurve',
-        'host': switch.ip,
-        'username': switch.username,
-        'password': switch.password,
-        'port': 22,
-        'timeout': 30,
-        'conn_timeout': 30,
+        "device_type": "hp_procurve",
+        "host": switch.ip,
+        "username": switch.username,
+        "password": switch.password,
+        "port": 22,
+        "timeout": 30,
+        "conn_timeout": 30,
     }
 
     timestamp = datetime.now()
@@ -108,29 +137,31 @@ def create_user_on_switch(switch: SwitchInfo, new_username: str, new_password: s
     try:
         with ConnectHandler(**device) as conn:
             # Enter configuration mode
-            output = conn.send_command_timing('configure terminal', delay_factor=2)
+            output = conn.send_command_timing("configure terminal", delay_factor=2)
             full_output.append(f"[configure terminal] {output}")
 
             # Create user command
-            output = conn.send_command_timing(f'password operator user-name {new_username}', delay_factor=2)
-            full_output.append(f"[password operator user-name {new_username}] {output}")
+            output = conn.send_command_timing(
+                f"password {role} user-name {new_username}", delay_factor=2
+            )
+            full_output.append(f"[password {role} user-name {new_username}] {output}")
 
             # Wait for password prompt and send password
             time.sleep(1)
             output = conn.send_command_timing(new_password, delay_factor=2)
-            full_output.append(f"[New password:] ******")
+            full_output.append("[New password:] ******")
 
             # Wait for re-enter prompt and send password again
             time.sleep(1)
             output = conn.send_command_timing(new_password, delay_factor=2)
-            full_output.append(f"[Re-enter:] ******")
+            full_output.append("[Re-enter:] ******")
 
             # Save configuration
-            output = conn.send_command_timing('write memory', delay_factor=2)
+            output = conn.send_command_timing("write memory", delay_factor=2)
             full_output.append(f"[write memory] {output}")
 
             # Exit
-            output = conn.send_command_timing('exit', delay_factor=2)
+            output = conn.send_command_timing("exit", delay_factor=2)
             full_output.append(f"[exit] {output}")
 
         return SwitchResult(
@@ -138,7 +169,7 @@ def create_user_on_switch(switch: SwitchInfo, new_username: str, new_password: s
             success=True,
             message="User created successfully",
             output="\n".join(full_output),
-            timestamp=timestamp
+            timestamp=timestamp,
         )
 
     except NetmikoTimeoutException as e:
@@ -147,7 +178,7 @@ def create_user_on_switch(switch: SwitchInfo, new_username: str, new_password: s
             success=False,
             message=f"Connection timeout: {e}",
             output=str(e),
-            timestamp=timestamp
+            timestamp=timestamp,
         )
     except NetmikoAuthenticationException as e:
         return SwitchResult(
@@ -155,7 +186,7 @@ def create_user_on_switch(switch: SwitchInfo, new_username: str, new_password: s
             success=False,
             message=f"Authentication failed: {e}",
             output=str(e),
-            timestamp=timestamp
+            timestamp=timestamp,
         )
     except Exception as e:
         return SwitchResult(
@@ -163,19 +194,29 @@ def create_user_on_switch(switch: SwitchInfo, new_username: str, new_password: s
             success=False,
             message=f"Error: {e}",
             output=str(e),
-            timestamp=timestamp
+            timestamp=timestamp,
         )
 
 
-def run_batch(switches: List[SwitchInfo], new_username: str, new_password: str, max_workers: int = 1) -> List[SwitchResult]:
+def run_batch(
+    switches: List[SwitchInfo],
+    new_username: str,
+    new_password: str,
+    role: str = "operator",
+    max_workers: int = 1,
+) -> List[SwitchResult]:
     """Run user creation on all switches sequentially or in parallel."""
     results = []
 
     if max_workers == 1:
         # Sequential execution with status line
         for i, switch in enumerate(switches, 1):
-            print(f"[{i}/{len(switches)}] {switch.name} ({switch.ip})... ", end='', flush=True)
-            result = create_user_on_switch(switch, new_username, new_password)
+            print(
+                f"[{i}/{len(switches)}] {switch.name} ({switch.ip})... ",
+                end="",
+                flush=True,
+            )
+            result = create_user_on_switch(switch, new_username, new_password, role)
             results.append(result)
             if result.success:
                 print("[OK]")
@@ -186,7 +227,9 @@ def run_batch(switches: List[SwitchInfo], new_username: str, new_password: str, 
         print(f"Running with {max_workers} workers...")
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_switch = {
-                executor.submit(create_user_on_switch, switch, new_username, new_password): switch
+                executor.submit(
+                    create_user_on_switch, switch, new_username, new_password, role
+                ): switch
                 for switch in switches
             }
 
@@ -197,17 +240,21 @@ def run_batch(switches: List[SwitchInfo], new_username: str, new_password: str, 
                 try:
                     result = future.result()
                     results.append(result)
-                    print(f"[{completed}/{len(switches)}] {switch.name} ({switch.ip})... {'[OK]' if result.success else f'[FAIL] {result.message}'}")
+                    print(
+                        f"[{completed}/{len(switches)}] {switch.name} ({switch.ip})... {'[OK]' if result.success else f'[FAIL] {result.message}'}"
+                    )
                 except Exception as e:
                     result = SwitchResult(
                         switch=switch,
                         success=False,
                         message=f"Execution error: {e}",
                         output=str(e),
-                        timestamp=datetime.now()
+                        timestamp=datetime.now(),
                     )
                     results.append(result)
-                    print(f"[{completed}/{len(switches)}] {switch.name} ({switch.ip})... [FAIL] {result.message}")
+                    print(
+                        f"[{completed}/{len(switches)}] {switch.name} ({switch.ip})... [FAIL] {result.message}"
+                    )
 
     return results
 
@@ -239,17 +286,20 @@ def print_summary(results: List[SwitchResult]) -> None:
                 print(f"  {result.switch.name} ({result.switch.ip}): {result.message}")
 
 
-def write_log(results: List[SwitchResult], username: str) -> None:
+def write_log(
+    results: List[SwitchResult], username: str, role: str = "operator"
+) -> None:
     """Write detailed log file with masked passwords."""
-    log_dir = Path('logs')
+    log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
 
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    log_file = log_dir / f'log_create_user_{timestamp}.txt'
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = log_dir / f"log_create_user_{timestamp}.txt"
 
-    with open(log_file, 'w') as f:
-        f.write(f"Bulk User Creation Log\n")
+    with open(log_file, "w") as f:
+        f.write("Bulk User Creation Log\n")
         f.write(f"Target username: {username}\n")
+        f.write(f"Target role: {role}\n")
         f.write(f"Execution time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write(f"Total switches: {len(results)}\n")
         f.write("=" * 80 + "\n\n")
@@ -257,7 +307,7 @@ def write_log(results: List[SwitchResult], username: str) -> None:
         for result in results:
             f.write(f"Switch: {result.switch.name} ({result.switch.ip})\n")
             f.write(f"Login user: {result.switch.username}\n")
-            f.write(f"Login password: ******\n")
+            f.write("Login password: ******\n")
             f.write(f"Timestamp: {result.timestamp.strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"Success: {result.success}\n")
             f.write(f"Message: {result.message}\n")
@@ -273,9 +323,11 @@ def write_failed_switches(results: List[SwitchResult]) -> None:
     if not failed:
         return
 
-    with open('failed_switches.txt', 'w') as f:
+    with open("failed_switches.txt", "w") as f:
         for result in failed:
-            f.write(f"{result.switch.name} | {result.switch.ip} | {result.switch.username} | {result.switch.password}\n")
+            f.write(
+                f"{result.switch.name} | {result.switch.ip} | {result.switch.username} | {result.switch.password}\n"
+            )
 
     print(f"Failed switches written to: failed_switches.txt ({len(failed)} entries)")
 
@@ -287,14 +339,31 @@ def prompt_retry(failed_switches: List[SwitchResult]) -> bool:
         return False
 
     response = input(f"\n{count} switch(es) failed. Retry? (y/n): ").strip().lower()
-    return response in ('y', 'yes')
+    return response in ("y", "yes")
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Bulk create operator user on Aruba/HP ProCurve switches')
-    parser.add_argument('--dry-run', action='store_true', help='Test on first switch only')
-    parser.add_argument('--workers', type=int, default=1, help='Number of parallel workers (default: 1)')
-    parser.add_argument('--file', type=str, default='switch.txt', help='Path to switch inventory file (default: switch.txt)')
+    parser = argparse.ArgumentParser(
+        description="Bulk create operator user on Aruba/HP ProCurve switches"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Test on first switch only"
+    )
+    parser.add_argument(
+        "--workers", type=int, default=1, help="Number of parallel workers (default: 1)"
+    )
+    parser.add_argument(
+        "--file",
+        type=str,
+        default="switch.txt",
+        help="Path to switch inventory file (default: switch.txt)",
+    )
+    parser.add_argument(
+        "--role",
+        choices=["operator", "manager"],
+        default=None,
+        help="User role: operator (read-only) or manager (full control). If omitted, prompts interactively.",
+    )
     args = parser.parse_args()
 
     # Parse switches
@@ -306,10 +375,10 @@ def main():
     print(f"Loaded {len(switches)} switches from {args.file}")
 
     # Get user input
-    username, password = get_user_input()
+    username, password, role = get_user_input(args.role)
 
     # Confirm
-    if not confirm_execution(username, len(switches)):
+    if not confirm_execution(username, len(switches), role):
         print("Cancelled.")
         sys.exit(0)
 
@@ -320,18 +389,20 @@ def main():
 
     # Run batch
     try:
-        results = run_batch(switches, username, password, max_workers=args.workers)
+        results = run_batch(
+            switches, username, password, role, max_workers=args.workers
+        )
     except KeyboardInterrupt:
         print("\n\nInterrupted by user.")
         # Still write log with partial results
-        write_log([], username)
+        write_log([], username, role)
         sys.exit(1)
 
     # Print summary
     print_summary(results)
 
     # Write log
-    write_log(results, username)
+    write_log(results, username, role)
 
     # Write failed switches file
     write_failed_switches(results)
@@ -341,11 +412,13 @@ def main():
     if failed and prompt_retry(failed):
         print("\nRetrying failed switches...")
         retry_switches = [r.switch for r in failed]
-        retry_results = run_batch(retry_switches, username, password, max_workers=args.workers)
+        retry_results = run_batch(
+            retry_switches, username, password, role, max_workers=args.workers
+        )
         print_summary(retry_results)
-        write_log(retry_results, username)
+        write_log(retry_results, username, role)
         write_failed_switches(retry_results)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
